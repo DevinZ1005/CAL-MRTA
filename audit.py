@@ -10,6 +10,7 @@ from .predictor import predict
 from .calibration import transform
 from .allocation import solve,selected_expected,utility_matrix
 from .report import write_report
+from .distortion_checks import verify_distortion
 
 
 def require(condition,message):
@@ -116,13 +117,7 @@ def audit(path):
             except Exception as exc:errors.append(f'{key}: {exc}')
     if c['phase']=='final':
         try:
-            dm=json.loads((run/'distortion_manifest.json').read_text());require(file_sha(run/'distortion.csv')==dm['file_hash'],'distortion hash')
-            with (run/'distortion.csv').open() as f:dr=list(csv.DictReader(f))
-            require(len(dr)==10000,'distortion workload');seen=set()
-            for row in dr:
-                key=(row['kernel'],int(row['replicate']),int(row['batch']),float(row['bias']));require(key not in seen,'duplicate distortion row');seen.add(key)
-                require(float(row['regret'])>=0,'negative distortion regret')
-                if float(row['bias'])==0:require(float(row['regret'])<1e-9 and int(row['disagreement'])==0,'zero distortion oracle agreement')
+            verify_distortion(run,c)
         except Exception as exc:errors.append(f'distortion: {exc}')
     try:verify_aggregation(run)
     except Exception as exc:errors.append(str(exc))

@@ -5,6 +5,7 @@ from pathlib import Path
 import numpy as np
 from .artifacts import atomic_json,atomic_bytes,write_csv,verify,verify_aggregation
 from .seeds import rng
+from .distortion_checks import verify_distortion
 
 METRICS=('realized','expected','regret','attempts','successes','failures','abstention','disagreement')
 TRAJECTORY_METRICS=('realized','expected','regret','attempts','successes','failures','disagreement','positive_utility_fraction')
@@ -49,6 +50,7 @@ def analyze(run,partial=False):
         atomic_json(run/'partial_summary.json',result)
         return result
     verify_aggregation(run)
+    if c['phase']=='final':dm,distortion_rows=verify_distortion(run,c)
     with (run/'episode_metrics.csv').open(newline='') as f:rows=list(csv.DictReader(f))
     found={};expected_rows=set()
     for k in c['kernels']:
@@ -121,13 +123,10 @@ def analyze(run,partial=False):
     source_bound_hits=sum(block['metadata']['source_bound_hit'] for block in source_manifest['blocks'])
     result=dict(partial=False,phase=c['phase'],primary=primary_result,completed_jobs=len(jobs),total_jobs=len(jobs),predictor_fits=len(source_manifest['blocks']),candidate_predictions=len(jobs)*160*40,assignment_solves=len(jobs)*160*5,online_refits=total_fit_events,online_bound_hits=bound_hits,source_bound_hits=source_bound_hits,unresolved_fitting_failures=0,attempted_pairs=total_attempts,episode_timing_seconds=wall,analysis_seconds=time.perf_counter()-started,warnings=warnings,interpretation='AI-assisted synthetic simulation analysis; calibration metrics and assignment utility are distinct endpoints.')
     if c['phase']=='final':
-        dm=json.loads((run/'distortion_manifest.json').read_text())
-        if dm['shared_batches']!=2000 or dm['assignment_solves']!=10000:raise ValueError('incomplete distortion diagnostic')
         result['distortion']=dm
     result['source_timing_seconds']={name:sum(block['metadata']['timing'][name] for block in source_manifest['blocks']) for name in source_manifest['blocks'][0]['metadata']['timing']}
     result['run_timing']=json.loads((run/'timing.json').read_text())
     if c['phase']=='final':
-        with (run/'distortion.csv').open() as f:distortion_rows=list(csv.DictReader(f))
         ds=[]
         for k in c['kernels']:
             for bias in c['distortion_biases']:

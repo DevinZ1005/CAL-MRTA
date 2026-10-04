@@ -15,6 +15,7 @@ from .policies import Policy,NAMES
 from .seeds import seed_tuple,integer_seed
 from .simulator import episode
 from .types import DecisionInput,Feedback
+from .distortion_checks import verify_distortion
 
 POLICIES=(*NAMES,'oracle')
 BIN_FIELDS=('count','sum_q','sum_y','sum_brier','sum_logloss','sum_estimation_squared')
@@ -159,13 +160,14 @@ def distortion(run,c):
                 batch,tele,dist,cost=public[0];tr=truth[0]
                 oracle=solve(tr.probabilities,batch.reward,batch.penalty,cost);optimum=selected_expected(oracle,tr.probabilities,batch.reward,batch.penalty,cost)
                 for bias in c['distortion_biases']:
-                    assn=oracle if bias==0 else solve(expit(logit(tr.probabilities)+bias),batch.reward,batch.penalty,cost)
+                    assn=solve(expit(logit(tr.probabilities)+bias),batch.reward,batch.penalty,cost)
                     value=selected_expected(assn,tr.probabilities,batch.reward,batch.penalty,cost)
                     if optimum-value < -1e-9:raise ValueError('distortion oracle bound')
                     if bias==0 and abs(value-optimum)>1e-9:raise ValueError('zero bias is not oracle')
                     rows.append(dict(kernel=k,replicate=r,batch=ep,bias=bias,expected=value,regret=max(0.,optimum-value),attempts=sum(x>=0 for x in assn.tasks),disagreement=sum(x!=z for x,z in zip(assn.tasks,oracle.tasks))))
     write_csv(Path(run)/'distortion.csv',rows,list(rows[0]))
-    atomic_json(Path(run)/'distortion_manifest.json',dict(rows=len(rows),shared_batches=len(rows)//5,assignment_solves=len(rows),file_hash=file_sha(Path(run)/'distortion.csv'),seconds=time.perf_counter()-t0,phase=5))
+    batches=len(c['kernels'])*c['replicates']*c['distortion_batches']
+    atomic_json(Path(run)/'distortion_manifest.json',dict(rows=len(rows),shared_batches=batches,oracle_solves=batches,bias_solves=len(rows),assignment_solves=batches+len(rows),zero_bias_method='independent_solve',file_hash=file_sha(Path(run)/'distortion.csv'),seconds=time.perf_counter()-t0,phase=5))
 
 def check_job(run,key,hashes):
     trace,meta=job_paths(run,key)
@@ -257,7 +259,7 @@ def run(config=None,output=None,frozen_run=None,resume=False):
         if c['phase']=='final':
             dm=run/'distortion_manifest.json'
             if dm.exists():
-                if file_sha(run/'distortion.csv')!=json.loads(dm.read_text())['file_hash']:raise ValueError('corrupt distortion diagnostic')
+                verify_distortion(run,c)
             else:distortion(run,c)
     ts=time.perf_counter();ne,nr=aggregate(run,c);aggregation_seconds=time.perf_counter()-ts
     atomic_json(run/'timing.json',dict(last_run_seconds=time.perf_counter()-t0,episode_rows=ne,round_rows=nr,aggregation_seconds=aggregation_seconds))

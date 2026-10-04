@@ -53,6 +53,7 @@ def main():
     v=sub.add_parser('validate-config',help='Validate the full fixed protocol');v.add_argument('--config',required=True)
     r=sub.add_parser('run',help='Execute or resume source fits and episode work units');r.add_argument('--config');r.add_argument('--output');r.add_argument('--frozen-run');r.add_argument('--resume',action='store_true')
     a=sub.add_parser('audit',help='Verify committed artifacts and deterministic replay');a.add_argument('--run',required=True)
+    i=sub.add_parser('verify-run',help='Read-only archived artifact checks; requires output_checksums.json');i.add_argument('--run',required=True);i.add_argument('--checksum-index-sha256',help='Optional previously recorded SHA-256 of output_checksums.json')
     b=sub.add_parser('benchmark',help='Extrapolate measured pilot runtime');b.add_argument('--run',required=True);b.add_argument('--target-config',required=True)
     f=sub.add_parser('freeze',help='Freeze final source, configuration, dependencies and prerequisite evidence');f.add_argument('--config',required=True);f.add_argument('--output',required=True)
     n=sub.add_parser('analyze',help='Aggregate paired outer-block effects');n.add_argument('--run',required=True);n.add_argument('--partial',action='store_true')
@@ -66,6 +67,9 @@ def main():
     elif args.command=='audit':
         from .audit import audit
         out=audit(args.run)
+    elif args.command=='verify-run':
+        from .integrity import verify_run
+        out=verify_run(args.run,args.checksum_index_sha256)
     elif args.command=='benchmark':out=benchmark(args.run,args.target_config)
     elif args.command=='freeze':out=freeze(args.config,args.output)
     elif args.command=='analyze':
